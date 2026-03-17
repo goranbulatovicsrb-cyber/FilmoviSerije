@@ -11,8 +11,6 @@
 #include <QStandardPaths>
 #include <QDebug>
 
-// ---- Embedded Python scripts ----
-
 static const char* IMPORT_SCRIPT = R"PYEOF(
 # -*- coding: utf-8 -*-
 import sys, json, pandas as pd, os, io
@@ -34,7 +32,7 @@ try:
     xl = pd.read_excel(sys.argv[1], sheet_name=None, dtype=str)
     result = []
     for sheet_name, df in xl.items():
-        cat = 'DOMACE' if any(x in sheet_name.upper() for x in ['DOMA', 'DOM', u'\u0106', u'\u010C']) else 'STRANE'
+        cat = 'DOMACE' if any(x in sheet_name.upper() for x in ['DOMA', 'DOM']) else 'STRANE'
         df.columns = [str(c).strip().upper() for c in df.columns]
         col_map = {}
         for c in df.columns:
@@ -149,8 +147,6 @@ wb.save(out_file)
 print('OK')
 )PYEOF";
 
-// ----------------------------------------------------------------
-
 XlsxBridge::XlsxBridge(QObject *parent) : QObject(parent) {}
 
 QString XlsxBridge::pythonExecutable() {
@@ -173,8 +169,6 @@ bool XlsxBridge::runPython(const QString &script, const QStringList &args,
     tf.close();
 
     QProcess proc;
-
-    // *** FIX: Force UTF-8 encoding on Windows ***
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("PYTHONIOENCODING", "utf-8");
     env.insert("PYTHONUTF8", "1");
@@ -273,8 +267,6 @@ bool XlsxBridge::exportToXlsx(const QString &filePath, const QList<SeriesData> &
 #include <QStandardPaths>
 #include <QDebug>
 
-// ---- Embedded Python scripts ----
-
 static const char* IMPORT_SCRIPT = R"PYEOF(
 # -*- coding: utf-8 -*-
 import sys, json, pandas as pd, os, io
@@ -296,7 +288,7 @@ try:
     xl = pd.read_excel(sys.argv[1], sheet_name=None, dtype=str)
     result = []
     for sheet_name, df in xl.items():
-        cat = 'DOMACE' if any(x in sheet_name.upper() for x in ['DOMA', 'DOM', u'\u0106', u'\u010C']) else 'STRANE'
+        cat = 'DOMACE' if any(x in sheet_name.upper() for x in ['DOMA', 'DOM']) else 'STRANE'
         df.columns = [str(c).strip().upper() for c in df.columns]
         col_map = {}
         for c in df.columns:
@@ -411,8 +403,6 @@ wb.save(out_file)
 print('OK')
 )PYEOF";
 
-// ----------------------------------------------------------------
-
 XlsxBridge::XlsxBridge(QObject *parent) : QObject(parent) {}
 
 QString XlsxBridge::pythonExecutable() {
@@ -435,8 +425,6 @@ bool XlsxBridge::runPython(const QString &script, const QStringList &args,
     tf.close();
 
     QProcess proc;
-
-    // *** FIX: Force UTF-8 encoding on Windows ***
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert("PYTHONIOENCODING", "utf-8");
     env.insert("PYTHONUTF8", "1");
