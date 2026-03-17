@@ -1,0 +1,175 @@
+name: Build SeriesIndexer
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  # ──────────────────────────────────────────────
+  #  WINDOWS BUILD → SeriesIndexer.exe
+  # ──────────────────────────────────────────────
+  build-windows:
+    name: Windows (Qt5 + MSVC)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt5
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '5.15.2'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2019_64'
+          modules: ''
+          cache: true
+
+      - name: Configure CMake
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="${{ env.Qt5_DIR }}"
+        shell: pwsh
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+        shell: pwsh
+
+      - name: Deploy Qt DLLs (windeployqt)
+        run: |
+          cd build/Release
+          windeployqt.exe --release --no-translations `
+            --no-system-d3d-compiler --no-opengl-sw `
+            SeriesIndexer.exe
+        shell: pwsh
+
+      - name: Copy seed database
+        run: Copy-Item "series_seed.db" "build/Release/series_seed.db"
+        shell: pwsh
+
+      - name: Create ZIP package
+        run: |
+          cd build
+          Compress-Archive -Path "Release\*" `
+            -DestinationPath "SeriesIndexer_Windows_x64.zip"
+        shell: pwsh
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SeriesIndexer-Windows-x64
+          path: build/SeriesIndexer_Windows_x64.zip
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  #  LINUX BUILD
+  # ──────────────────────────────────────────────
+  build-linux:
+    name: Linux (Qt5 + GCC)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            cmake \
+            qtbase5-dev \
+            libqt5sql5-sqlite \
+            libqt5network5 \
+            python3-openpyxl \
+            python3-pandas
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp build/SeriesIndexer dist/SeriesIndexer_Linux_x64
+          cp series_seed.db dist/
+          cp README.md dist/
+          cd dist && tar -czf ../SeriesIndexer_Linux_x64.tar.gz .
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SeriesIndexer-Linux-x64
+          path: SeriesIndexer_Linux_x64.tar.gz
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  #  RELEASE — automatski kada pushuješ tag v*
+  # ──────────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SeriesIndexer-Windows-x64
+          path: ./artifacts
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SeriesIndexer-Linux-x64
+          path: ./artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "SeriesIndexer ${{ github.ref_name }}"
+          body: |
+            ## 🎬 SeriesIndexer ${{ github.ref_name }}
+
+            ### 📥 Preuzimanje
+
+            | Platform | Fajl |
+            |----------|------|
+            | 🪟 Windows 10/11 (64-bit) | `SeriesIndexer_Windows_x64.zip` |
+            | 🐧 Linux (64-bit) | `SeriesIndexer_Linux_x64.tar.gz` |
+
+            ### 🚀 Instalacija — Windows
+            1. Preuzmite `SeriesIndexer_Windows_x64.zip`
+            2. Raspakovajte negdje (npr. `C:\SeriesIndexer\`)
+            3. Pokrenite `SeriesIndexer.exe`
+            4. Baza sa vašom kolekcijom se automatski inicijalizuje
+
+            ### ⭐ IMDB ocjene
+            - Idite na **⚙ Podešavanja** → unesite [besplatan OMDb API ključ](https://www.omdbapi.com/apikey.aspx)
+            - Kliknite **⭐ IMDB Sve** za batch preuzimanje ocjena
+
+            ### 📋 Šta je novo
+            - Kompletna kolekcija serija predučitana
+            - Napredna pretraga i filteri
+            - IMDB integracija (ocjene, žanr, opis, glumci)
+            - Uvoz/izvoz Excel (.xlsx)
+            - Smart Update iz Excel fajla
+          files: |
+            artifacts/SeriesIndexer_Windows_x64.zip
+            artifacts/SeriesIndexer_Linux_x64.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
